@@ -47,7 +47,7 @@ class Qualtrics(object):
     # http://docs.python-requests.org/en/master/user/advanced/#ssl-cert-verification
     requests_kwargs = dict()
 
-    def __init__(self, user=None, token=None, api_version="2.5"):
+    def __init__(self, user=None, token=None, datacenter_id=None, api_version="2.5"):
         """
         :param user: The user name. If omitted, value of environment variable QUALTRICS_USER will be used.
         :param token: API token for the user. If omitted, value of environment variable QUALTRICS_TOKEN will be used.
@@ -64,6 +64,11 @@ class Qualtrics(object):
         if token is None:
             raise ValueError("token parameter should be passed to __init__ or environment variable QUALTRICS_TOKEN should be set")  # noqa
         self.token = token
+
+        if datacenter_id is None:
+            datacenter_id = os.environ.get("QUALTRICS_DATACENTER_ID", None)
+        self.datacenter_id = datacenter_id
+
         self.default_api_version = api_version
         # Version must be a string, not an integer or float
         assert self.default_api_version, (str, unicode)
@@ -208,6 +213,64 @@ class Qualtrics(object):
         # Error message is in json_response["Meta"]["ErrorMessage"]
         self.last_error_message = json_response["Meta"]["ErrorMessage"]
         return None
+
+    def request3(self, request_group, request, **kwargs):
+        # base url
+        # https://yourdatacenterid.qualtrics.com/API/v3/
+        version = kwargs.pop("Version", self.default_api_version)
+        # Version must be a string, not an integer or float
+        assert version, (str, unicode)
+        if version != "3.0":
+            raise ValueError("Must use set api_version on Qualtrics class to 3.0 to use Request3 method")
+
+        url = "https://{datacenter_id}.qualtrics.com/API/v3/{request_group}/{request}".format(
+            datacenter_id=self.datacenter_id, 
+            request_group=request_group, 
+            request=request)
+
+        headers = dict({
+                "X-API-TOKEN" : self.token
+            })
+
+        try:
+            r = requests.get(
+                url,
+                headers=headers,
+                **self.requests_kwargs
+                )
+        except (ConnectionError, Timeout, TooManyRedirects, HTTPError) as e:
+            self.last_url = ""
+            self.response = None
+            self.last_error_message = str(e)
+            return None
+
+        try:
+            json_response = json.loads(r.text)
+        except ValueError:
+          raise ValueError("Response not a JSON serializable format")
+        
+        self.json_response = json_response
+        self.last_status_code = r.status_code
+
+        # Print the proxy notice for incorrect or missing datacenter ID
+        if json_response['meta'].get('notice'):
+            print json_response['meta']['notice']
+
+        if self.last_status_code == 200:
+            self.last_error_message = None
+            return json_response
+        elif self.last_status_code in (401, 403):
+            self.last_error_message = json_response['meta']['error']['errorMessage']
+            return None
+        else:
+            return json_response
+
+    def getOrganization(self, org_id, **kwargs):    
+        if self.request3("organizations", org_id, **kwargs) is None:
+            return None
+        return self.json_response['result']
+
+
 
     def createPanel(self, LibraryID, Name, **kwargs):
         """ Creates a new Panel in the Qualtrics System and returns the id of the new panel

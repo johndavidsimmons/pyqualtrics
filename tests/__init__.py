@@ -684,5 +684,25 @@ Use link https://nd.qualtrics.com/jfe/form/SV_8pqqcl4sy2316ZL and answer "Male".
                 self.qualtrics.deleteSurvey(SurveyID=survey_id)
 
 
+class TestQualtrics3(unittest.TestCase):
+
+    def setUp(self):
+        self.token = os.environ["QUALTRICS_TOKEN"]
+        self.api_version = "3.0"
+        self.datacenter_id = os.environ.get("QUALTRICS_DATACENTER_ID", None)
+        self.organization_id = os.environ.get("QUALTRICS_ORGANIZATION_ID", None)
+        self.qualtrics = Qualtrics(token=self.token, api_version="3.0", datacenter_id=self.datacenter_id)
+        self.qualtrics.requests_kwargs= {"verify":False}
+
+    def test_datacenter_id_exists(self):
+        self.assertTrue(self.datacenter_id)
+
+    def test_get_organization(self):
+        response = self.qualtrics.getOrganization(self.organization_id)
+        self.assertEquals(self.organization_id, response["id"])
+
+    def tearDown(self):
+        pass
+
 if __name__ == "__main__":
     unittest.main()
